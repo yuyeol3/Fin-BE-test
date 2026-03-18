@@ -36,6 +36,16 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/fin-be:latest
 
+    # [새로 추가된 단계] 깃허브의 설정 파일들을 GCP 서버로 복사
+    - name: Copy Config Files to GCP
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.GCP_HOST }}
+        username: ${{ secrets.GCP_USERNAME }}
+        key: ${{ secrets.GCP_SSH_KEY }}
+        source: "nginx/nginx.conf, docker-compose.yml" # 이 두 파일을 복사해서
+        target: "~/fin-be" # 서버의 이 폴더에 넣습니다.
+
     - name: Deploy to GCP
       uses: appleboy/ssh-action@master
       with:

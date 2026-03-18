@@ -1,18 +1,55 @@
 services:
+  # 1. Nginx 컨테이너
+  nginx:
+    image: nginx:alpine
+    container_name: fin-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # 깃허브에서 서버로 복사될 Nginx 설정 파일 연결
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # 방금 GCP 서버에 발급받은 실제 SSL 인증서 폴더를 읽기 전용(ro)으로 연결!
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+
+  # 2. 백엔드 컨테이너
+  backend:
+    image: ${DOCKERHUB_USERNAME}/fin-be:latest
+    container_name: fin-backend
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/database
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
+    # 외부에서 8080으로 찌르지 못하게 차단 (Nginx를 통해서만 들어올 수 있음)
+    expose:
+      - "8080"
+    depends_on:
+      - postgres
+
+  # 3. DB 컨테이너
   postgres:
-    # 일반 postgres 대신 vector 확장이 포함된 이미지 사용 (PostgreSQL 16 기준)
     image: pgvector/pgvector:pg16
     container_name: fin-postgres
     restart: always
     environment:
-      POSTGRES_USER: user         # 접속할 DB 계정 이름
-      POSTGRES_PASSWORD: password # 계정 비밀번호
-      POSTGRES_DB: database       # 기본으로 생성될 데이터베이스 이름
-      TZ: Asia/Seoul                # 타임존 설정
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: database
+      TZ: Asia/Seoul
     ports:
-      - "5678:5432"                 # 호스트 포트 : 컨테이너 포트
-#    volumes:
-#      - :/var/lib/postgresql/data # 데이터 영구 저장을 위한 볼륨 매핑
-#
-#volumes:
-#  postgres_data:
+      - "5678:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
