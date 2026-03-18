@@ -56,6 +56,9 @@ jobs:
           # 서버의 프로젝트 폴더로 이동
           cd ~/fin-be
           
+          # GCP 서버에서 Docker Hub에 로그인 (보안을 위해 password-stdin 사용)
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
           # 최신 백엔드 이미지 다운로드
           docker pull ${{ secrets.DOCKERHUB_USERNAME }}/fin-be:latest
           
