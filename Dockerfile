@@ -1,5 +1,5 @@
 # 1. 가벼운 JRE 21 이미지 사용
-FROM eclipse-temurin:21.0.3-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 # 2. 작업 디렉토리 설정
 WORKDIR /app
