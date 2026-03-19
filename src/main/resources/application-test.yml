@@ -47,6 +47,10 @@ jwt:
 
 
 app:
+  frontend:
+    url: "http://localhost:5173"
   cookie:
     secure: true
     same-site: None
+  oauth2:
+    success-redirect-url: "/"
