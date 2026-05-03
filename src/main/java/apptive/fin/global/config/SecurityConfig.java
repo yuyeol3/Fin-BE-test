@@ -1,11 +1,13 @@
 package apptive.fin.global.config;
 
-import apptive.fin.auth.BusinessAuthenticationEntryPoint;
-import apptive.fin.auth.JwtAuthFilter;
+import apptive.fin.auth.oauth.OAuth2FailureHandler;
+import apptive.fin.auth.security.BusinessAccessDeniedHandler;
+import apptive.fin.auth.security.BusinessAuthenticationEntryPoint;
+import apptive.fin.auth.security.JwtAuthFilter;
 import apptive.fin.auth.oauth.OAuth2SuccessHandler;
 import apptive.fin.auth.oauth.OAuth2UserService;
 import apptive.fin.global.properties.AppProperties;
-import apptive.fin.global.util.JwtUtil;
+import apptive.fin.auth.util.JwtUtil;
 import apptive.fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -30,10 +32,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtUtil jwtUtil;
-    private final UserRepository userRepository;
     private final OAuth2UserService oAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
+    private final OAuth2FailureHandler oAuth2FailureHandler;
     private final BusinessAuthenticationEntryPoint businessAuthenticationEntryPoint;
+    private final BusinessAccessDeniedHandler businessAccessDeniedHandler;
     private final AppProperties appProperties;
 
 
@@ -44,20 +47,23 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-//                        .requestMatchers("/", "/index.html", "/assets/**", "/error", "/favicon.ico").permitAll()
-                                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+           //                     .requestMatchers("/favicon.ico").permitAll()
+                                .requestMatchers("/oauth2/authorization/**", "/login/oauth2/**").permitAll()
                                 .requestMatchers("/auth/**").permitAll()
                                 .requestMatchers(HttpMethod.POST, "/users").permitAll()
+                                //.anyRequest().permitAll()
                                 .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
                         .userInfoEndpoint(userInfo -> userInfo.userService(oAuth2UserService))
                         .successHandler(oAuth2SuccessHandler)
+                        .failureHandler(oAuth2FailureHandler)
                 )
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(businessAuthenticationEntryPoint)
+                        .accessDeniedHandler(businessAccessDeniedHandler)
                 )
-                .addFilterBefore(new JwtAuthFilter(jwtUtil, userRepository), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
 
 
         return http.build();

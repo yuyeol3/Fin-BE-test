@@ -1,7 +1,12 @@
 package apptive.fin.auth;
 
+import apptive.fin.auth.dto.LoginResponseDto;
+import apptive.fin.auth.entity.RefreshToken;
+import apptive.fin.auth.repository.RefreshTokenRepository;
+import apptive.fin.auth.service.AuthService;
 import apptive.fin.global.error.BusinessException;
-import apptive.fin.global.util.JwtUtil;
+import apptive.fin.auth.util.JwtUtil;
+import apptive.fin.term.service.TermService;
 import apptive.fin.user.entity.User;
 import apptive.fin.user.UserRole;
 import org.junit.jupiter.api.Test;
@@ -13,7 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -32,6 +37,9 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Mock
+    private TermService termService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -42,7 +50,7 @@ class AuthServiceTest {
     void 리프레시_토큰을_발급하면_해시를_저장하고_raw_토큰을_반환한다() {
         User user = createUser(1L, UserRole.BASIC_ACCESS);
         byte[] rawRefreshToken = new byte[]{1, 2, 3, 4};
-        LocalDateTime beforeCall = LocalDateTime.now();
+        Instant beforeCall = Instant.now();
 
         when(jwtUtil.generateRefreshToken()).thenReturn(rawRefreshToken);
         when(jwtUtil.hashToken(rawRefreshToken)).thenReturn("hashed-token");
@@ -58,31 +66,33 @@ class AuthServiceTest {
         assertThat(savedToken.getUser()).isSameAs(user);
         assertThat(savedToken.isActive()).isTrue();
         assertThat(savedToken.getExpiresAt())
-                .isBetween(beforeCall.plusSeconds(120), LocalDateTime.now().plusSeconds(120));
+                .isBetween(beforeCall.plusSeconds(120), Instant.now().plusSeconds(120));
     }
 
     @Test
-    void 리프레시_요청이_성공하면_이전_토큰을_삭제하고_새_토큰을_재발급한다() {
+    void 리프레시_요청이_성공하면_이전_토큰을_비활성화하고_새_토큰을_재발급한다() {
         byte[] oldRawToken = new byte[]{9, 8, 7, 6};
         byte[] newRawToken = new byte[]{1, 2, 3, 4};
         String encodedOldToken = Base64.getEncoder().encodeToString(oldRawToken);
         User user = createUser(1L, UserRole.ADMIN);
         RefreshToken storedToken = RefreshToken.builder()
                 .tokenHash("old-hash")
-                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .expiresAt(Instant.now().plusSeconds(300))
                 .user(user)
                 .build();
 
         when(jwtUtil.hashToken(oldRawToken)).thenReturn("old-hash");
         when(refreshTokenRepository.findByTokenHash("old-hash")).thenReturn(Optional.of(storedToken));
-        when(jwtUtil.generateAccessToken("1", UserRole.ADMIN)).thenReturn("new-access-token");
+        when(refreshTokenRepository.deactivateIfActive("old-hash")).thenReturn(1);
+        when(jwtUtil.generateAccessToken("1", UserRole.ADMIN, true)).thenReturn("new-access-token");
         when(jwtUtil.generateRefreshToken()).thenReturn(newRawToken);
         when(jwtUtil.hashToken(newRawToken)).thenReturn("new-hash");
         when(jwtUtil.getRefreshExpiration()).thenReturn(300);
+        when(termService.didUserAgreeAllRequiredTerms(1L)).thenReturn(true);
 
         LoginResponseDto response = authService.refresh(encodedOldToken);
 
-        verify(refreshTokenRepository).delete(storedToken);
+        verify(refreshTokenRepository).deactivateIfActive("old-hash");
         verify(refreshTokenRepository).save(refreshTokenCaptor.capture());
 
         assertThat(response.accessToken()).isEqualTo("new-access-token");
@@ -107,7 +117,7 @@ class AuthServiceTest {
         String encodedToken = Base64.getEncoder().encodeToString(rawToken);
         RefreshToken inactiveToken = RefreshToken.builder()
                 .tokenHash("inactive-hash")
-                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .expiresAt(Instant.now().plusSeconds(300))
                 .user(createUser(1L, UserRole.BASIC_ACCESS))
                 .build();
         ReflectionTestUtils.setField(inactiveToken, "isActive", false);
@@ -124,7 +134,7 @@ class AuthServiceTest {
         String encodedToken = Base64.getEncoder().encodeToString(rawToken);
         RefreshToken expiredToken = RefreshToken.builder()
                 .tokenHash("expired-hash")
-                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .expiresAt(Instant.now().minusSeconds(60))
                 .user(createUser(1L, UserRole.BASIC_ACCESS))
                 .build();
 
